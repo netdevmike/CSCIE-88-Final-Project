@@ -1,0 +1,65 @@
+version: '3.5'
+
+networks:
+  twitter-demo:
+    name: twitter-demo-net
+    driver: bridge
+
+services:
+  zookeeper:
+    image: zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - twitter-demo
+
+  kafka:
+    image: wurstmeister/kafka
+    environment:
+      # KAFKA_BROKER_ID: 1
+      # (Hack for Mac)use this if you want to have docker host node to be used as broadcast ip
+      HOSTNAME_COMMAND: "/sbin/ip route|awk '/src/ { print $$NF }'"
+      # Use below for Linux
+      # HOSTNAME_COMMAND: "ip route get 1.2.3.4 | awk '{print $$7}'"
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092
+      # KAFKA_CREATE_TOPICS: "varnish_raw_logs:10:1"
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092
+    networks:
+      - twitter-demo
+
+  elasticsearch:
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_USERNAME=elastic
+      - ELASTIC_PASSWORD=elastic
+
+    image: elasticsearch:8.5.2
+    depends_on:
+      - kafka
+      - zookeeper
+    ports:
+      - 9200:9200
+      - 9300:9300
+    volumes:
+      - "./docker_share:/docker_share"
+    networks:
+      - twitter-demo
+
+  kibana:
+    image: kibana:8.5.2
+    volumes:
+      - "./docker_share:/docker_share"
+    ports:
+      - "5601:5601"
+    networks:
+      - twitter-demo
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
